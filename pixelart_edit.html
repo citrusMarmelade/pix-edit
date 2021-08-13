@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Document</title>
+	<style>
+		.pix-edit {
+			display: grid;
+			grid-template-columns: repeat(8, 1fr);
+			max-width: 80vh;
+			max-height: 80vh;
+		}
+
+		.pix-edit div {
+			aspect-ratio: 1;
+			border: solid 1px black;
+			display: inline-block;
+		}
+	</style>
+</head>
+<body>
+	<div class="pix-edit"></div>
+	<script>
+		const test = document.querySelector(".pix-edit");
+		var mousedown = false;
+
+		function color_tile(elem) {
+			const { x, y } = elem.dataset;
+			if (x != null && y != null) {
+				elem.style.backgroundColor = "black";
+			}
+		}
+
+		test.addEventListener("mouseover", function (e) {
+			if (mousedown) {
+				color_tile(e.target);
+			}
+		}, { passive: true });
+
+		test.addEventListener("mousedown", function (e) {
+			e.preventDefault();
+			mousedown = true;
+			color_tile(e.target);
+		});
+
+		test.addEventListener("mouseup", function (e) {
+			e.preventDefault();
+			mousedown = false;
+		});
+
+		for (let i = 0; i < 64; i++) {
+			const elem = document.createElement('div');
+			elem.dataset.x = i % 8;
+			elem.dataset.y = Math.floor(i / 8);
+			test.append(elem);
+		}
+
+	</script>
+</body>
+</html>
