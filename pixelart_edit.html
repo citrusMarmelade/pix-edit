@@ -23,136 +23,174 @@
 	</style>
 </head>
 <body>
-	<div class="pix-edit"></div>
-	<script>
-		const divmod = (a, b) => [a % b, Math.floor(a / b)];
-		const is_leftclick = (e) => e.buttons & 1;
-		function newElement(elem, props = {}) {
-			return Object.assign(document.createElement(elem), props);
-		}
-		function scaleCanvas(canvas, scale) {
-			const scaled = newElement('canvas');
+<div class="pix-edit"></div>
+<script>
+	//JQUERY LITE
+	const $ = document.querySelector.bind(document);
+	const $$ = document.querySelectorAll.bind(document);
+	// END OF JQUERY LITE
 
-			const {width: w, height: h} = canvas;
-			scaled.width = w * scale;
-			scaled.height = h * scale;
-			
-			const ctx = scaled.getContext('2d');
-			ctx.imageSmoothingEnabled = false;
-			ctx.scale(scale, scale)
-			ctx.drawImage(canvas, 0, 0);
-			return scaled;
-		}
+	const divmod = (a, b) => [a % b, Math.floor(a / b)];
+	const is_leftclick = (e) => e.buttons & 1;
+	const isBuiltinProto = (p) => p.isPrototypeOf(function () {
+	});
 
-		class WithEvents {
-			static events;
-			static events_extra = {};
-			bindEvents(elem) {
-				const cls = this.constructor;
-				for (const event of cls.events)
-					elem.addEventListener(
-						event, this[event].bind(this), cls.events_extra[event] ?? {}
-					);
-			}
+	function newElement(elem, props = {}) {
+		const dataset = props.dataset;
+		delete props.dataset;
+		const obj = Object.assign(document.createElement(elem), props);
+		if (dataset) Object.assign(obj.dataset, dataset);
+		return obj;
+	}
+
+	class Color {
+		#hex;
+		#raw;
+
+		constructor(value) {
+			this.#hex = value;
+			this.#raw = Color.parseColor(value);
 		}
 
-		class ColorPicker extends WithEvents {
-			static events = ["input"];
-			constructor(elem, initial_color = '#000000') {
-				super();
-				this.elem = elem;
-				this.colorHex = initial_color;
-				this.bindEvents(elem);
-			}
+		get hex() {
+			return this.#hex;
+		}
 
-			set colorHex(value) {
-				this.colorRaw = this.parseColor(value);
-				this._colorHex = value;
-			}
-			get colorHex() {
-				return this._colorHex;
-			}
-			parseColor(color) {
-				const hex3 = color.match(/[0-9A-F]{2}/gi).map((s) => parseInt(s, 16));
-				return [...hex3, 255];
-			}
+		get raw() {
+			return this.#raw;
+		}
 
-			input(e) {
-				const {target} = e;
-				if (target.checkValidity()) {
-					console.log("e")
-					this.colorHex = target.value;
-				}
+		static parseColor(color_hex) {
+			const hex3 = color_hex.match(/[0-9A-F]{2}/gi).map((s) => parseInt(s, 16));
+			return [...hex3, 255];
+		}
+	}
+
+	function prototypeChain(next) {
+		const parents = [];
+		while (next && !isBuiltinProto(next)) {
+			parents.push(next);
+			next = Object.getPrototypeOf(next);
+		}
+		return parents.flatMap(Object.getOwnPropertyNames);
+	}
+
+	function scaleCanvas(canvas, scale) {
+		const scaled = newElement('canvas');
+
+		const {width: w, height: h} = canvas;
+		scaled.width = w * scale;
+		scaled.height = h * scale;
+
+		const ctx = scaled.getContext('2d');
+		ctx.imageSmoothingEnabled = false;
+		ctx.scale(scale, scale)
+		ctx.drawImage(canvas, 0, 0);
+		return scaled;
+	}
+
+	class WithEvents {
+		constructor(props) {
+			Object.assign(this, props);
+			this.domInit();
+			this.bindEvents();
+		}
+
+		domInit() {
+		}
+
+		bindEvents() {
+			prototypeChain(this).flatMap((item) => {
+				const match = item.match(/^on(?:_(.+))?_(.+?)$/);
+				return match ? [match] : [];
+			}).forEach(([fn, elem, event]) => {
+				this[elem ?? 'elem'].addEventListener(
+					event, this[fn].bind(this), this.events_extra[fn] ?? {}
+				);
+			});
+		}
+
+		get events_extra() {
+			return {};
+		}
+	}
+
+	class ColorPicker extends WithEvents {
+		constructor(elem, initial_color = '#000000') {
+			super({elem});
+			elem.value = initial_color;
+			this.color = new Color(initial_color);
+		}
+
+		on_input(e) {
+			const {target} = e;
+			if (target.checkValidity()) {
+				this.color = new Color(target.value);
+			}
+		}
+	}
+
+	class PixEdit extends WithEvents {
+		constructor(root_elem, {columns = 16, rows = 16} = {}) {
+			const grid = newElement('div', {classList: ['pix-grid']});
+			super({
+				image_data: new ImageData(columns, rows),
+				columns, rows, grid, root_elem
+			});
+		}
+
+		domInit() {
+			const color_picker = newElement('input', {type: 'color'});
+			const {rows, columns} = this;
+
+			for (let y = 0; y < rows; y++)
+				for (let x = 0; x < columns; x++)
+					this.grid.append(newElement('div', {dataset: {x, y}}));
+
+			this.grid.style.setProperty('--column-count', columns);
+			this.root_elem.append(color_picker, this.grid);
+			this.colorpicker = new ColorPicker(color_picker);
+		}
+
+		get events_extra() {
+			return {
+				...super.events_extra,
+				on_grid_mouseover: {passive: true},
 			}
 		}
 
-		class PixEdit extends WithEvents {
-			static events = ['mousedown', 'mousemove'];
-			static events_extra = {
-				mousemove: {passive: true}
-			};
-			constructor(elem, columns=16, rows=16) {
-				super();
-
-				this.rootElem = elem;
-				this.columns = columns;
-				this.rows = rows;
-				this.drawColorHex = '#000000';
-				this.drawColor = [0, 0, 0, 255];
-				this.domInit();
-
-				const canvas = newElement('canvas');
-				const ctx = canvas.getContext('2d');
-				this.imageData = ctx.createImageData(columns, rows);
-			}
-			domInit() {
-				const colorpicker = newElement('input', {type: 'color', value: this.drawColor});
-				const grid = newElement('div', {classList: ['pix-grid']});
-				const {rows, columns} = this;
-				for (let i = 0; i < columns*rows; i++) {
-					const tile = newElement('div');
-					[tile.dataset.x, tile.dataset.y] = divmod(i, columns);
-					grid.append(tile);
-				}
-				grid.style.setProperty('--column-count', columns)
-				this.rootElem.append(colorpicker, grid);
-				
-				this.bindEvents(grid);
-				this.colorPicker = new ColorPicker(colorpicker);
-			}
-
-			toImage({format = 'image/png', scale = 1} = {}) {
-				const canvas = newElement('canvas', {width: this.columns, height: this.rows});
-				const ctx = canvas.getContext('2d');
-				ctx.putImageData(this.imageData, 0, 0);
-				const scaled = (scale == 1) ? canvas: scaleCanvas(canvas, scale);
-				return scaled.toDataURL(format);
-			}
-
-			colorTile(elem) {
-				const { x, y } = elem.dataset;
-				console.log(elem);
-				if (x == null || y == null) return;
-				console.log("hit");
-				elem.style.backgroundColor = this.colorPicker.colorHex;
-				const o = (Number(x)+Number(y)*this.columns)*4;
-				const {data} = this.imageData;
-				[data[o + 0], data[o + 1], data[o + 2], data[o + 3]] = this.colorPicker.colorRaw;
-			}
-
-			mousedown(e) {
-				if (!is_leftclick(e)) return;
-				e.preventDefault();
-				this.colorTile(e.target);
-			}
-			mousemove(e) {
-				if (!is_leftclick(e)) return;
-				this.colorTile(e.target);
-			}
+		toImage({format = 'image/png', scale = 1} = {}) {
+			const canvas = newElement('canvas', {width: this.columns, height: this.rows});
+			const ctx = canvas.getContext('2d');
+			ctx.putImageData(this.image_data, 0, 0);
+			const scaled = (scale === 1) ? canvas : scaleCanvas(canvas, scale);
+			return scaled.toDataURL(format);
 		}
 
-		const test = document.querySelector(".pix-edit");
-		const editor = new PixEdit(test);
-	</script>
+		colorTile(elem) {
+			const {x, y} = elem.dataset;
+			if (x == null || y == null) return;
+			const {raw, hex} = this.colorpicker.color;
+			elem.style.backgroundColor = hex;
+			const o = (Number(x) + Number(y) * this.columns) * 4;
+			const {data} = this.image_data;
+			[data[o + 0], data[o + 1], data[o + 2], data[o + 3]] = raw;
+		}
+
+		on_grid_mousedown(e) {
+			if (!is_leftclick(e)) return;
+			e.preventDefault();
+			this.colorTile(e.target);
+		}
+
+		on_grid_mouseover(e) {
+			if (!is_leftclick(e)) return;
+			this.colorTile(e.target);
+		}
+	}
+
+	const test = $(".pix-edit");
+	const editor = new PixEdit(test);
+</script>
 </body>
 </html>
