@@ -25,10 +25,30 @@
 <body>
 	<div class="pix-edit"></div>
 	<script>
+		//JQUERY LITE
+		const $ = document.querySelector.bind(document);
+		const $$ = document.querySelectorAll.bind(document);
+		$.ajax = fetch;
+		// END OF JQUERY LITE
+
 		const divmod = (a, b) => [a % b, Math.floor(a / b)];
 		const is_leftclick = (e) => e.buttons & 1;
+		const isBuiltinProto = (p) => p.isPrototypeOf(function(){});
+
 		function newElement(elem, props = {}) {
-			return Object.assign(document.createElement(elem), props);
+			const dataset = props.dataset;
+			delete props.dataset;
+			const obj = Object.assign(document.createElement(elem), props);
+			if (dataset) Object.assign(obj.dataset, dataset);
+			return obj;
+		}
+		function prototypeChain(next) {
+			const parents = [];
+			while (next && !isBuiltinProto(next)) {
+				parents.push(next);
+				next = Object.getPrototypeOf(next);
+			}
+			return parents.flatMap(Object.getOwnPropertyNames);
 		}
 		function scaleCanvas(canvas, scale) {
 			const scaled = newElement('canvas');
@@ -36,7 +56,7 @@
 			const {width: w, height: h} = canvas;
 			scaled.width = w * scale;
 			scaled.height = h * scale;
-			
+
 			const ctx = scaled.getContext('2d');
 			ctx.imageSmoothingEnabled = false;
 			ctx.scale(scale, scale)
@@ -45,14 +65,26 @@
 		}
 
 		class WithEvents {
-			static events;
-			static events_extra = {};
-			bindEvents(elem) {
-				const cls = this.constructor;
-				for (const event of cls.events)
-					elem.addEventListener(
-						event, this[event].bind(this), cls.events_extra[event] ?? {}
+			events_extra = {};
+			constructor(props) {
+				Object.assign(this, props);
+				this.domInit();
+				this.bindEvents();
+			}
+
+			domInit() {
+				throw "Not implemented";
+			}
+
+			bindEvents() {
+				prototypeChain(this).flatMap((item) => {
+						const match = item.match(/^on(?:_(.+))?_(.+?)$/);
+						return match?[match]:[];
+				}).forEach(([fn, elem, event]) => {
+					this[elem ?? 'elem'].addEventListener(
+						event, this[fn].bind(this), this.events_extra[fn] ?? {}
 					);
+				});
 			}
 		}
 
