@@ -28,7 +28,6 @@
 		//JQUERY LITE
 		const $ = document.querySelector.bind(document);
 		const $$ = document.querySelectorAll.bind(document);
-		$.ajax = fetch;
 		// END OF JQUERY LITE
 
 		const divmod = (a, b) => [a % b, Math.floor(a / b)];
@@ -42,6 +41,26 @@
 			if (dataset) Object.assign(obj.dataset, dataset);
 			return obj;
 		}
+
+		class Color {
+			#hex;
+			#raw;
+			constructor(value) {
+				this.#hex = value;
+				this.#raw = Color.parseColor(value);
+			}
+			get hex() {
+				return this.#hex;
+			}
+			get raw() {
+				return this.#raw;
+			}
+			static parseColor(color_hex) {
+				const hex3 = color_hex.match(/[0-9A-F]{2}/gi).map((s) => parseInt(s, 16));
+				return [...hex3, 255];
+			}
+		}
+
 		function prototypeChain(next) {
 			const parents = [];
 			while (next && !isBuiltinProto(next)) {
